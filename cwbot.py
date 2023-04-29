@@ -9,7 +9,7 @@ URI = f'http://{HOST}/api/v1/generate'
 def run(prompt):
     request = {
         'prompt': prompt,
-        'max_new_tokens': 200,
+        'max_new_tokens': 60,
         'do_sample': True,
         'temperature': 0.72,
         'top_p': 0.73,
@@ -82,6 +82,13 @@ async def on_message(message):
     
     user_name = message.author.name if message.author.nick is None else message.author.nick
 
+    if message.content.startswith('!clearivy'):
+        first_inter = False
+        chat_memory.clear()
+        await message.channel.send(f"`Message history reset` 😶‍🌫")
+        await bot.process_commands(message)
+        return
+
     if message.content.startswith('!impersonate'):
         ct = message.content[len('!impersonate')+1:]
         assert len(ct) > 0
@@ -135,23 +142,28 @@ async def on_message(message):
         await message.channel.send(first_msg)
         await message.channel.send(f"`Simulating {current_character}...` 🤖")
     else:
-        response = run(message.content)
+        think_msg = await message.channel.send('`Thinking...`')
+        response = run(chat_log)
+        print('response:')
         print(response)
         has_bug = response.startswith('*')
         if not has_bug:
-            response = response[len(proc):]
+            #response = response[len(proc):]
+            if response.startswith(' '):
+                response = response[1:]
             if '\n' in response:
                 response = response.split('\n')[0]
         
-        if chat_log in response:
-            response = response[len(chat_log):]
+            #if chat_log in response:
+            #    response = response[len(chat_log):]
         
         if not has_bug:
             response = str(f'{current_character}: {response}').replace('\n', '')
+            chat_memory.append(response)
         else:
             response = str(f'{response}').replace('\n', '')
         # send response
-        chat_memory.append(response)
+        await think_msg.delete()
         await message.channel.send(response, reference=message)
     
     # Process commands if any
