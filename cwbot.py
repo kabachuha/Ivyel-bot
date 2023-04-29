@@ -93,6 +93,13 @@ async def on_message(message):
     #proc = f"Below is a script from Wesnoth campaign After the Storm.\nWrite a response that completes {current_character}'s last line in the conversation. \n\n{user_name}: {message.content}\n{current_character}: "
     
     proc = f"Below is a script from Wesnoth campaign After the Storm.\n"
+
+    if message.content.startswith('!proc'):
+        await message.channel.send("Using the proc:")
+        proctext = proc.split('\n')[0]
+        await message.channel.send(f"*{proctext}*")
+        await bot.process_commands(message)
+        return
     
     sentence = []
     chat_memory.append(f'{user_name}: {message.content}')
@@ -127,12 +134,11 @@ async def on_message(message):
         first_msg = f"{message.author.mention}, hi, I'm Ivyel and I'm activated!"
         await message.channel.send(first_msg)
         await message.channel.send(f"`Simulating {current_character}...` 🤖")
-        await message.channel.send("Using the proc")
-        await message.channel.send(proc)
     else:
         response = run(message.content)
         print(response)
-        if not response.startswith('*'):
+        has_bug = response.startswith('*')
+        if not has_bug:
             response = response[len(proc):]
             if '\n' in response:
                 response = response.split('\n')[0]
@@ -140,8 +146,10 @@ async def on_message(message):
         if chat_log in response:
             response = response[len(chat_log):]
         
-        response = str(f'\n{current_character}: {response}').replace('\n', '')
-        
+        if not has_bug:
+            response = str(f'{current_character}: {response}').replace('\n', '')
+        else:
+            response = str(f'{response}').replace('\n', '')
         # send response
         chat_memory.append(response)
         await message.channel.send(response, reference=message)
