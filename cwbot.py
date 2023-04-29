@@ -130,8 +130,12 @@ async def on_message(message):
         await message.channel.send("Using the proc")
         await message.channel.send(proc)
     else:
-        response = "error"
+        response = run(message.content)
         print(response)
+        if not response.startswith('*'):
+            response = response[len(proc):]
+            if '\n' in response:
+                response = response.split('\n')[0]
         
         if chat_log in response:
             response = response[len(chat_log):]
