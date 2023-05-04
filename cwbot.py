@@ -28,7 +28,7 @@ def to_thread(func: typing.Callable) -> typing.Coroutine:
 @to_thread
 def run(prompt):
     global config
-    request = config.clone()
+    request = config
     request['prompt'] = prompt
 
     print(request)
