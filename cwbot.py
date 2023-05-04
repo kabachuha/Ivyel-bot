@@ -1,35 +1,35 @@
 import discord
 from discord.ext import commands
 import requests
+import typing
+import asyncio
+import functools
+import json
 
 # For local streaming, the websockets are hosted without ssl - http://
 HOST = 'localhost:5000'
 URI = f'http://{HOST}/api/v1/generate'
 
+config = None
+
+with open('config.json', 'r') as cfg_file:
+    config = json.loads(cfg_file.read())
+
+assert config is not None
+
+HOST = config.pop('host')
+
+def to_thread(func: typing.Callable) -> typing.Coroutine:
+    @functools.wraps(func)
+    async def wrapper(*args, **kwargs):
+        return await asyncio.to_thread(func, *args, **kwargs)
+    return wrapper
+
+@to_thread
 def run(prompt):
-    request = {
-        'prompt': prompt,
-        'max_new_tokens': 60,
-        'do_sample': True,
-        'temperature': 0.72,
-        'top_p': 0.73,
-        'typical_p': 1,
-        'repetition_penalty': 1.1,
-        'encoder_repetition_penalty': 1,
-        'top_k': 0,
-        'min_length': 0,
-        'no_repeat_ngram_size': 0,
-        'num_beams': 1,
-        'penalty_alpha': 0,
-        'length_penalty': 1,
-        'early_stopping': False,
-        'seed': -1,
-        'add_bos_token': True,
-        'truncation_length': 2048,
-        'ban_eos_token': False,
-        'skip_special_tokens': True,
-        'stopping_strings': []
-    }
+    global config
+    request = config.clone()
+    request['prompt'] = prompt
 
     print(request)
 
@@ -73,6 +73,8 @@ async def on_ready():
 async def on_message(message):
     global first_inter
     global chat_memory
+    global current_character
+
     # Ignore messages from the bot itself
     if message.author == bot.user:
         return
@@ -85,15 +87,23 @@ async def on_message(message):
     if message.content.startswith('!clearivy'):
         first_inter = False
         chat_memory.clear()
-        await message.channel.send(f"`Message history reset` 😶‍🌫")
+        await message.channel.send(f"`Message history reset` :face_in_clouds:")
+
+    if not first_inter:
+        first_inter = True
+        await message.channel.send(f"{message.author.mention}, hi, I'm Ivyel, the Infiltrator designed by the Chaos Empire to impersonate various Iftu/AtS characters and I'm activated!")
+        await message.channel.send("`Note that I may be slow to respond as I'm running locally at kabachuha's PC`")
+        await message.channel.send(f"`Simulating {current_character}...` 🤖")
+        await message.channel.send("`Rename your server nicknames to the characters whose role you want to play when interacting with me using Server Profile (Профиль сервера) settings`")
+        await message.channel.send("`To change my role to another character print !impersonate charactername, to reset the chat use !clearivy`")
         await bot.process_commands(message)
         return
 
     if message.content.startswith('!impersonate'):
         ct = message.content[len('!impersonate')+1:]
         assert len(ct) > 0
-        message.channel.send(f"`Assuming the role of {current_character}.` 🕵")
-        await message.channel.send(first_msg)
+        current_character = ct
+        await message.channel.send(f"`Assuming the role of {current_character}.` 🕵")
         await bot.process_commands(message)
         return
     
@@ -109,9 +119,14 @@ async def on_message(message):
         return
     
     sentence = []
-    chat_memory.append(f'{user_name}: {message.content}')
+
+    think_for_user = False #message.content.startswith('!thinkforme')
+
+    if not think_for_user:
+        chat_memory.append(f'{user_name}: {message.content}')
+
     chat_log = '\n'.join([proc] + chat_memory)
-    chat_log += f'\n{current_character}:'
+    chat_log += f'\n{user_name if think_for_user else current_character}:'
     print(chat_log)
     
     while len(chat_log.split()) > 180:
@@ -135,38 +150,31 @@ async def on_message(message):
     if len(message.attachments) > 0:
         await message.channel.send("`... Please... don’t... send pics to me...`", reference=message)
         return
-    
-    if not first_inter:
-        first_inter = True
-        first_msg = f"{message.author.mention}, hi, I'm Ivyel and I'm activated!"
-        await message.channel.send(first_msg)
-        await message.channel.send(f"`Simulating {current_character}...` 🤖")
+
+    think_msg = await message.channel.send('`Thinking...`')
+    response = await run(chat_log)
+    print('response:')
+    print(response)
+    has_bug = response.startswith('*')
+    if not has_bug:
+        if response.startswith(' '):
+            response = response[1:]
+        if '\n' in response:
+            response = response.split('\n')[0]
+
+    if not has_bug:
+        response = str(f'{user_name if think_for_user else current_character}: {response}').replace('\n', '')
+        chat_memory.append(response)
     else:
-        think_msg = await message.channel.send('`Thinking...`')
-        response = run(chat_log)
-        print('response:')
-        print(response)
-        has_bug = response.startswith('*')
-        if not has_bug:
-            #response = response[len(proc):]
-            if response.startswith(' '):
-                response = response[1:]
-            if '\n' in response:
-                response = response.split('\n')[0]
-        
-            #if chat_log in response:
-            #    response = response[len(chat_log):]
-        
-        if not has_bug:
-            response = str(f'{current_character}: {response}').replace('\n', '')
-            chat_memory.append(response)
-        else:
-            response = str(f'{response}').replace('\n', '')
-        # send response
-        await think_msg.delete()
-        await message.channel.send(response, reference=message)
-    
+        response = str(f'{response}').replace('\n', '')
+    # send response
+    await think_msg.delete()
+    await message.channel.send(response, reference=message)
+
     # Process commands if any
     await bot.process_commands(message)
+
+    #if think_for_user:
+    #    await message.delete()
 
 bot.run(key)
